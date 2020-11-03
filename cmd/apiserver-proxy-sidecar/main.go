@@ -38,6 +38,7 @@ func parseAndValidateFlags() *app.ConfigParams {
 		"[optional] indicates if the sidecar should run as a daemon")
 	flag.StringVar(&params.IPAddress, "ip-address", "", "ip-address on which the proxy is listening (e.g. 1.2.3.4).")
 	flag.StringVar(&params.LocalPort, "port", "9443", "[optional] port on which the proxy is listening.")
+	flag.StringVar(&params.KubernetesServiceIP, "kubernetes-service-ip-address", "", "ip-address of the kubernetes service (e.g. 1.2.3.4).")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage of %s (%s):\n", os.Args[0], version.Version())
@@ -49,6 +50,10 @@ func parseAndValidateFlags() *app.ConfigParams {
 	if params.IPAddress == "" {
 		klog.Errorln("--ip-address is required")
 		os.Exit(1)
+	}
+
+	if params.KubernetesServiceIP == "" {
+		klog.Fatalf("--kubernetes-service-ip-address is required")
 	}
 
 	return params

@@ -27,9 +27,15 @@ func NewSidecarApp(params *ConfigParams) (*SidecarApp, error) {
 		return nil, xerrors.Errorf("unable to parse IP address %q - %v", c.params.IPAddress, err)
 	}
 
-	c.localIP = addr
+	serviceAddr, err := netlink.ParseAddr(fmt.Sprintf("%s/32", c.params.KubernetesServiceIP))
+	if err != nil || addr == nil {
+		return nil, xerrors.Errorf("unable to parse IP address %q - %v", c.params.KubernetesServiceIP, err)
+	}
 
-	klog.Infof("Using IP address %q", params.IPAddress)
+	c.localIP = addr
+	c.kubernetesServiceIP = serviceAddr
+
+	klog.Infof("Using IP address %q, Kubernetes Serice IP %q", params.IPAddress, params.KubernetesServiceIP)
 
 	return c, nil
 }
@@ -39,6 +45,7 @@ func (c *SidecarApp) TeardownNetworking() error {
 	klog.Infof("Cleaning up")
 
 	err := c.netManager.RemoveIPAddress()
+	svsErr := c.serviceNetManager.RemoveIPAddress()
 
 	if c.params.SetupIptables {
 		for _, rule := range c.iptablesRules {
@@ -51,29 +58,42 @@ func (c *SidecarApp) TeardownNetworking() error {
 			c.iptables.DeleteRule(rule.table, rule.chain, rule.args...)
 		}
 	}
+	if err != nil {
+		return err
+	}
 
-	return err
+	return svsErr
 }
 
 func (c *SidecarApp) getIPTables() utiliptables.Interface {
 	// using the localIPStr param since we need ip strings here
 	c.iptablesRules = append(c.iptablesRules, []iptablesRule{
 		// Match traffic destined for localIp:localPort and set the flows to be NOTRACKED, this skips connection tracking
-		{utiliptables.Table("raw"), utiliptables.ChainPrerouting, []string{"-p", "tcp", "-d", c.params.IPAddress,
-			"--dport", c.params.LocalPort, "-j", "NOTRACK"}},
+		{utiliptables.Table("raw"), utiliptables.ChainPrerouting, []string{
+			"-p", "tcp", "-d", c.params.IPAddress,
+			"--dport", c.params.LocalPort, "-j", "NOTRACK",
+		}},
 		// There are rules in filter table to allow tracked connections to be accepted. Since we skipped connection tracking,
 		// need these additional filter table rules.
-		{utiliptables.TableFilter, utiliptables.ChainInput, []string{"-p", "tcp", "-d", c.params.IPAddress,
-			"--dport", c.params.LocalPort, "-j", "ACCEPT"}},
+		{utiliptables.TableFilter, utiliptables.ChainInput, []string{
+			"-p", "tcp", "-d", c.params.IPAddress,
+			"--dport", c.params.LocalPort, "-j", "ACCEPT",
+		}},
 		// Match traffic from c.params.IPAddress:localPort and set the flows to be NOTRACKED, this skips connection tracking
-		{utiliptables.Table("raw"), utiliptables.ChainOutput, []string{"-p", "tcp", "-s", c.params.IPAddress,
-			"--sport", c.params.LocalPort, "-j", "NOTRACK"}},
+		{utiliptables.Table("raw"), utiliptables.ChainOutput, []string{
+			"-p", "tcp", "-s", c.params.IPAddress,
+			"--sport", c.params.LocalPort, "-j", "NOTRACK",
+		}},
 		// Additional filter table rules for traffic frpm c.params.IPAddress:localPort
-		{utiliptables.TableFilter, utiliptables.ChainOutput, []string{"-p", "tcp", "-s", c.params.IPAddress,
-			"--sport", c.params.LocalPort, "-j", "ACCEPT"}},
+		{utiliptables.TableFilter, utiliptables.ChainOutput, []string{
+			"-p", "tcp", "-s", c.params.IPAddress,
+			"--sport", c.params.LocalPort, "-j", "ACCEPT",
+		}},
 		// Skip connection tracking for requests to apiserver-proxy that are locally generated, example - by hostNetwork pods
-		{utiliptables.Table("raw"), utiliptables.ChainOutput, []string{"-p", "tcp", "-d", c.params.IPAddress,
-			"--dport", c.params.LocalPort, "-j", "NOTRACK"}},
+		{utiliptables.Table("raw"), utiliptables.ChainOutput, []string{
+			"-p", "tcp", "-d", c.params.IPAddress,
+			"--dport", c.params.LocalPort, "-j", "NOTRACK",
+		}},
 	}...)
 	execer := exec.New()
 
@@ -120,18 +140,22 @@ func (c *SidecarApp) runChecks() {
 		}
 	}
 
-	klog.V(2).Infoln("Ensuring ip address")
+	klog.V(2).Infoln("Ensuring ip addresses")
 
 	if err := c.netManager.EnsureIPAddress(); err != nil {
 		klog.Errorf("Error ensuring ip address: %v", err)
 	}
+	if err := c.serviceNetManager.EnsureIPAddress(); err != nil {
+		klog.Errorf("Error ensuring service ip address: %v", err)
+	}
 
-	klog.V(2).Infoln("Ensured ip address")
+	klog.V(2).Infoln("Ensured ip addresses")
 }
 
 // RunApp invokes the background checks and runs coreDNS as a cache
 func (c *SidecarApp) RunApp(ctx context.Context) {
 	c.netManager = netif.NewNetifManager(c.localIP, c.params.Interface)
+	c.serviceNetManager = netif.NewNetifManager(c.kubernetesServiceIP, c.params.Interface)
 
 	if c.params.SetupIptables {
 		c.iptables = c.getIPTables()

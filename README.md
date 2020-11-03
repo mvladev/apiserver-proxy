@@ -13,6 +13,7 @@ This component consists of `apiserver-proxy-sidecar` which runs on every `Node` 
 It does the following:
 
 1. adds the IP Address (`--ip-address` flag) the loopback interface  (`--interface` flag).
+1. adds the Kubernetes Service IP Address (`--kubernetes-service-ip-address` flag) the loopback interface  (`--interface` flag).
 1. [optionally] execute the following `iptables` rules (e.g with `--ip-address=10.96.0.2`):
 
     ```text
@@ -34,25 +35,26 @@ The implementation of that proxy is fully transparent and can be replaced at any
 
 ```console
 bazel run //cmd/apiserver-proxy-sidecar -- --help
-      --add_dir_header                   If true, adds the file directory to the header
-      --alsologtostderr                  log to standard error as well as files
-      --cleanup                          [optional] indicates whether created interface and iptables should be removed on exit.
-      --daemon                           [optional] indicates if the sidecar should run as a daemon (default true)
-      --interface string                 [optional] name of the interface to add address to. (default "lo")
-      --ip-address string                ip-address on which the proxy is listening.
-      --log_backtrace_at traceLocation   when logging hits line file:N, emit a stack trace (default :0)
-      --log_dir string                   If non-empty, write log files in this directory
-      --log_file string                  If non-empty, use this log file
-      --log_file_max_size uint           Defines the maximum size a log file can grow to. Unit is megabytes. If the value is 0, the maximum file size is unlimited. (default 1800)
-      --logtostderr                      log to standard error instead of files (default true)
-      --port string                      [optional] port on which the proxy is listening. (default "443")
-      --setup-iptables                   [optional] indicates whether iptables rules should be setup.
-      --skip_headers                     If true, avoid header prefixes in the log messages
-      --skip_log_headers                 If true, avoid headers when opening log files
-      --stderrthreshold severity         logs at or above this threshold go to stderr (default 2)
-      --sync-interval duration           [optional] interval to check for iptables rules. (default 1m0s)
-  -v, --v Level                          number for the log level verbosity
-      --vmodule moduleSpec               comma-separated list of pattern=N settings for file-filtered logging
+      --add_dir_header                         If true, adds the file directory to the header of the log messages
+      --alsologtostderr                        log to standard error as well as files
+      --cleanup                                [optional] indicates whether created interface and iptables should be removed on exit.
+      --daemon                                 [optional] indicates if the sidecar should run as a daemon (default true)
+      --interface string                       [optional] name of the interface to add address to. (default "lo")
+      --ip-address string                      ip-address on which the proxy is listening (e.g. 1.2.3.4).
+      --kubernetes-service-ip-address string   ip-address of the kubernetes service (e.g. 1.2.3.4).
+      --log_backtrace_at traceLocation         when logging hits line file:N, emit a stack trace (default :0)
+      --log_dir string                         If non-empty, write log files in this directory
+      --log_file string                        If non-empty, use this log file
+      --log_file_max_size uint                 Defines the maximum size a log file can grow to. Unit is megabytes. If the value is 0, the maximum file size is unlimited. (default 1800)
+      --logtostderr                            log to standard error instead of files (default true)
+      --port string                            [optional] port on which the proxy is listening. (default "9443")
+      --setup-iptables                         [optional] indicates whether iptables rules should be setup.
+      --skip_headers                           If true, avoid header prefixes in the log messages
+      --skip_log_headers                       If true, avoid headers when opening log files
+      --stderrthreshold severity               logs at or above this threshold go to stderr (default 2)
+      --sync-interval duration                 [optional] interval to check for iptables rules. (default 1m0s)
+  -v, --v Level                                number for the log level verbosity
+      --vmodule moduleSpec                     comma-separated list of pattern=N settings for file-filtered logging
 ```
 
 ## API Server proxy pod webhook
